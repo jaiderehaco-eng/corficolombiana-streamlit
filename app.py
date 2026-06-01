@@ -173,15 +173,28 @@ def plotly_base(height: int = 360) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=3600, show_spinner=False)
 def cargar_datos(period: str) -> pd.DataFrame:
-    def _get(ticker):
+    def _get(ticker: str) -> pd.Series:
         raw = yf.download(ticker, period=period, auto_adjust=True, progress=False)
+        if raw.empty:
+            raise ValueError(f"Yahoo Finance no devolvio datos para {ticker}.")
         if isinstance(raw.columns, pd.MultiIndex):
             raw.columns = raw.columns.get_level_values(0)
+        if "Close" not in raw.columns:
+            raise ValueError(f"Yahoo Finance no devolvio columna Close para {ticker}.")
         return raw["Close"].copy()
 
-    s_corf   = _get("CORFICOLCF.CL")
-    s_usdcop = _get("COP=X")
-    s_colcap = _get("ICOLCAP.CL")
+    def _get_first(tickers: list[str]) -> pd.Series:
+        errores = []
+        for ticker in tickers:
+            try:
+                return _get(ticker)
+            except Exception as exc:
+                errores.append(f"{ticker}: {exc}")
+        raise ValueError("No se pudo descargar ninguna fuente. " + " | ".join(errores))
+
+    s_corf = _get_first(["CORFICOLCF.CL"])
+    s_usdcop = _get_first(["COP=X"])
+    s_colcap = _get_first(["^COLCAP", "ICOLCAP.CL"])
 
     df = pd.concat([s_corf, s_usdcop, s_colcap], axis=1, join="inner")
     df.columns = ["Corficolombiana", "USDCOP", "COLCAP"]
@@ -265,7 +278,11 @@ with st.sidebar:
 # CARGA Y CÁLCULOS
 # ─────────────────────────────────────────────────────────────────────────────
 with st.spinner("Descargando datos desde Yahoo Finance…"):
-    df = cargar_datos(period)
+    try:
+        df = cargar_datos(period)
+    except Exception as exc:
+        st.error(f"No se pudieron descargar los datos desde Yahoo Finance: {exc}")
+        st.stop()
 
 if df.empty or len(df) < 20:
     st.error("No se pudieron obtener datos suficientes. Intenta con otro período o actualiza.")
