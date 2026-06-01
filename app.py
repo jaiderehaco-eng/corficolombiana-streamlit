@@ -152,6 +152,15 @@ def insight_text(text: str, icon: str = "💡"):
         <span style='color:{C["amber"]};'>{icon}</span>&nbsp; {text}
     </div>""", unsafe_allow_html=True)
 
+def r2_label(value: float) -> str:
+    return f"{max(value, 0) * 100:.1f}% varianza explicada" if value >= 0 else "Sin poder explicativo fuera de muestra"
+
+def r2_explained_pct(value: float) -> float:
+    return max(value, 0) * 100
+
+def r2_unexplained_pct(value: float) -> float:
+    return min(max(1 - max(value, 0), 0), 1) * 100
+
 # Layout de Plotly base
 def plotly_base(height: int = 360) -> dict:
     return dict(
@@ -629,28 +638,14 @@ st.markdown("<br>", unsafe_allow_html=True)
 variacion_usd_p = ((df["USDCOP"].iloc[-1] / df["USDCOP"].iloc[0]) - 1) * 100
 variacion_col_p = ((df["COLCAP"].iloc[-1] / df["COLCAP"].iloc[0]) - 1) * 100
 
-card(f"""
-<div style='font-size:13px;color:{C["muted"]};margin-bottom:14px;font-weight:500;'>
-    Síntesis del período · {periodo_label}
-</div>
-<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:20px;'>
-    <div style='text-align:center;'>
-        <div style='font-size:11px;color:{C["muted"]};text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;'>Corficolombiana</div>
-        <div style='font-family:"Libre Baskerville",serif;font-size:24px;color:{C["blue"]};'>${precio_actual:,.0f}</div>
-        <div style='font-size:12px;color:{C["green"] if variacion_pct >= 0 else C["red"]};margin-top:4px;'>{variacion_pct:+.1f}%</div>
-    </div>
-    <div style='text-align:center;'>
-        <div style='font-size:11px;color:{C["muted"]};text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;'>USD/COP</div>
-        <div style='font-family:"Libre Baskerville",serif;font-size:24px;color:{C["amber"]};'>${df["USDCOP"].iloc[-1]:,.0f}</div>
-        <div style='font-size:12px;color:{C["green"] if variacion_usd_p >= 0 else C["red"]};margin-top:4px;'>{variacion_usd_p:+.1f}%</div>
-    </div>
-    <div style='text-align:center;'>
-        <div style='font-size:11px;color:{C["muted"]};text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;'>COLCAP</div>
-        <div style='font-family:"Libre Baskerville",serif;font-size:24px;color:{C["green"]};'>{df["COLCAP"].iloc[-1]:,.0f}</div>
-        <div style='font-size:12px;color:{C["green"] if variacion_col_p >= 0 else C["red"]};margin-top:4px;'>{variacion_col_p:+.1f}%</div>
-    </div>
-</div>
-""")
+st.markdown(f"**Síntesis del período · {periodo_label}**")
+sin1, sin2, sin3 = st.columns(3)
+with sin1:
+    kpi("Corficolombiana", f"${precio_actual:,.0f}", f"{variacion_pct:+.1f}%", C["blue"])
+with sin2:
+    kpi("USD/COP", f"${df['USDCOP'].iloc[-1]:,.0f}", f"{variacion_usd_p:+.1f}%", C["amber"])
+with sin3:
+    kpi("COLCAP", f"{df['COLCAP'].iloc[-1]:,.0f}", f"{variacion_col_p:+.1f}%", C["green"])
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -670,10 +665,10 @@ with st.expander("📐 Validación estadística del modelo"):
     m1, m2, m3, m4 = st.columns(4)
     with m1:
         kpi("R² (Entrenamiento)", f"{mod['r2_tr']:.4f}",
-            f"{mod['r2_tr']*100:.1f}% varianza explicada", C["blue"])
+            r2_label(mod["r2_tr"]), C["blue"])
     with m2:
         kpi("R² (Prueba)", f"{mod['r2_te']:.4f}",
-            f"{mod['r2_te']*100:.1f}% varianza explicada", C["green"])
+            r2_label(mod["r2_te"]), C["green"])
     with m3:
         kpi("RMSE (Prueba)", f"${mod['rmse']:,.0f}",
             "Error típico en COP", C["amber"])
@@ -806,9 +801,9 @@ with st.expander("📐 Validación estadística del modelo"):
     <div style='font-size:13px;color:{C["muted"]};line-height:1.7;padding:8px 0;'>
         <b style='color:{C["text"]};'>Interpretación técnica:</b><br>
         Con un R² de <b style='color:{C["blue"]};'>{mod['r2_te']:.4f}</b> en datos de prueba,
-        el modelo captura el <b>{mod['r2_te']*100:.1f}%</b> de la variabilidad del precio.
+        el modelo captura el <b>{r2_explained_pct(mod['r2_te']):.1f}%</b> de la variabilidad del precio.
         El error típico (RMSE) es de <b>${mod['rmse']:,.0f} COP</b>, lo que indica cuánto
-        se equivoca el modelo en promedio. El {(1-mod['r2_te'])*100:.1f}% no explicado
+        se equivoca el modelo en promedio. El {r2_unexplained_pct(mod['r2_te']):.1f}% no explicado
         corresponde a factores corporativos, sectoriales y de mercado no incluidos en este modelo.
     </div>
     """, unsafe_allow_html=True)
@@ -820,41 +815,30 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ─────────────────────────────────────────────────────────────────────────────
 section_title("Conclusión del análisis")
 
-card(f"""
-<div style='display:grid;grid-template-columns:1fr 1fr;gap:24px;'>
-    <div>
-        <div style='font-size:12px;color:{C["muted"]};text-transform:uppercase;
-            letter-spacing:1.5px;font-weight:500;margin-bottom:12px;'>Hallazgos principales</div>
-        <ul style='color:#A1A1AA;font-size:13.5px;line-height:1.85;margin:0;padding-left:18px;'>
-            <li>Corficolombiana refleja dinámicas del <strong style='color:{C["text"]};'>mercado colombiano</strong>
-                y reacciona al contexto macroeconómico del país.</li>
-            <li>El <strong style='color:{C["amber"]};'>USD/COP</strong> captura la percepción de riesgo-país:
-                fluctuaciones en el tipo de cambio pueden señalar cambios en el apetito por activos colombianos.</li>
-            <li>El <strong style='color:{C["green"]};'>COLCAP</strong> captura el sentimiento bursátil colectivo:
-                el ciclo del mercado local es el principal riesgo sistémico para esta acción.</li>
-            <li>Las variables seleccionadas explican <strong style='color:{C["blue"]};'>
-                el {mod['r2_te']*100:.1f}%</strong> de la variabilidad histórica del precio en el período analizado.</li>
-            <li>El mercado es <strong style='color:{C["text"]};'>multifactorial</strong>:
-                resultados corporativos, política monetaria, liquidez y psicología del mercado
-                también juegan roles importantes.</li>
-        </ul>
-    </div>
-    <div>
-        <div style='font-size:12px;color:{C["muted"]};text-transform:uppercase;
-            letter-spacing:1.5px;font-weight:500;margin-bottom:12px;'>Perspectiva de inversión</div>
-        <div style='color:#A1A1AA;font-size:13.5px;line-height:1.85;'>
-            Invertir en Corficolombiana implica asumir la exposición al
-            <em>riesgo sistémico</em> del mercado colombiano. El inversionista que compra
-            esta acción está, en parte, apostando por la estabilidad macroeconómica de
-            Colombia (COP estable, política fiscal sostenible) y por el dinamismo del
-            mercado bursátil local (COLCAP creciente).<br><br>
-            Este análisis no predice el precio futuro. Su valor reside en comprender
-            <strong style='color:{C["text"]};'>qué factores han explicado su comportamiento</strong>
-            históricamente, como punto de partida para un análisis fundamental más profundo.
-        </div>
-    </div>
-</div>
-""")
+con1, con2 = st.columns(2)
+with con1:
+    st.markdown("**Hallazgos principales**")
+    st.markdown(
+        f"""
+        - Corficolombiana refleja dinámicas del mercado colombiano y reacciona al contexto macroeconómico del país.
+        - El USD/COP captura la percepción de riesgo-país y puede señalar cambios en el apetito por activos colombianos.
+        - El COLCAP captura el sentimiento bursátil colectivo y el riesgo sistémico local.
+        - En prueba, el modelo explica {r2_explained_pct(mod['r2_te']):.1f}% de la variabilidad del precio en el período analizado.
+        - El mercado es multifactorial: resultados corporativos, política monetaria, liquidez y psicología del mercado también importan.
+        """
+    )
+with con2:
+    st.markdown("**Perspectiva de inversión**")
+    st.markdown(
+        """
+        Invertir en Corficolombiana implica asumir exposición al riesgo sistémico del mercado colombiano.
+        El inversionista que compra esta acción está, en parte, apostando por la estabilidad macroeconómica
+        de Colombia y por el dinamismo del mercado bursátil local.
+
+        Este análisis no predice el precio futuro. Su valor está en mostrar qué factores han acompañado
+        históricamente su comportamiento, como punto de partida para un análisis fundamental más profundo.
+        """
+    )
 
 # Footer
 st.markdown(f"""
